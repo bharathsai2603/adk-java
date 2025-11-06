@@ -22,6 +22,7 @@ import com.datastax.oss.driver.api.core.CqlSession;
 import com.datastax.oss.driver.api.core.data.CqlVector;
 import com.google.adk.sessions.Session;
 import com.google.adk.tools.retrieval.CassandraRagRetrieval;
+import com.google.adk.utils.CassandraDBHelper;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.genai.types.Content;
@@ -64,12 +65,16 @@ public class CassandraMemoryService implements BaseMemoryService {
   }
 
   public CassandraMemoryService(
-      @Nonnull CqlSession session, @Nonnull String keyspace, @Nonnull String table) {
-    this(session, keyspace, table, new RedbusEmbeddingService("", ""));
+      @Nonnull String keyspace, @Nonnull String table, @Nonnull EmbeddingService embeddingService) {
+    this(CassandraDBHelper.getInstance().getSession(), keyspace, table, embeddingService);
   }
 
-  public CassandraMemoryService(@Nonnull CqlSession session) {
-    this(session, "rae", "rae_data");
+  public CassandraMemoryService(@Nonnull String keyspace, @Nonnull String table) {
+    this(keyspace, table, new RedbusEmbeddingService("", ""));
+  }
+
+  public CassandraMemoryService() {
+    this("rae", "rae_data");
   }
 
   @Override

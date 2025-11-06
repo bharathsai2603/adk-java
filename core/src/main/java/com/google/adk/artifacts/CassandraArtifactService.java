@@ -17,11 +17,10 @@
 package com.google.adk.artifacts;
 
 import com.datastax.oss.driver.api.core.CqlSession;
-import com.datastax.oss.driver.api.core.CqlSessionBuilder;
 import com.datastax.oss.driver.api.core.cql.ResultSet;
 import com.datastax.oss.driver.api.core.cql.Row;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.adk.store.CassandraHelper;
+import com.google.adk.utils.CassandraDBHelper;
 import com.google.common.collect.ImmutableList;
 import com.google.genai.types.Part;
 import io.reactivex.rxjava3.core.Completable;
@@ -42,8 +41,9 @@ public final class CassandraArtifactService implements BaseArtifactService {
   private final ObjectMapper objectMapper;
 
   public CassandraArtifactService() {
-    this.session = CassandraHelper.getSession();
-    this.objectMapper = CassandraHelper.getObjectMapper();
+    CassandraDBHelper helper = CassandraDBHelper.getInstance();
+    this.session = helper.getSession();
+    this.objectMapper = helper.getObjectMapper();
   }
 
   @Override
@@ -174,11 +174,14 @@ public final class CassandraArtifactService implements BaseArtifactService {
 
   public static class CassandraArtifactServiceExample {
     public static void main(String[] args) {
-      CqlSessionBuilder sessionBuilder =
-          CqlSession.builder()
-              .addContactPoint(new java.net.InetSocketAddress("127.0.0.1", 9042))
-              .withLocalDatacenter("datacenter1");
-      CassandraHelper.initialize(sessionBuilder);
+      // Initialize CassandraDBHelper via system properties
+      // Set system properties before running:
+      // -Dcassandra_host=127.0.0.1
+      // -Dcassandra_port=9042
+      // -Dcassandra_user=cassandra
+      // -Dcassandra_password=cassandra
+      // -Dcassandra_keyspace=rae
+      // -Dcassandra_datacenter=datacenter1
 
       CassandraArtifactService artifactService = new CassandraArtifactService();
 
@@ -202,7 +205,7 @@ public final class CassandraArtifactService implements BaseArtifactService {
               .blockingGet();
       System.out.println("Loaded artifact content: " + loadedArtifact.text().get());
 
-      CassandraHelper.close();
+      CassandraDBHelper.getInstance().close();
     }
   }
 }

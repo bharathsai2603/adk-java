@@ -58,7 +58,12 @@ public class CassandraMemoryServiceIT {
                 new InetSocketAddress(cassandra.getHost(), cassandra.getMappedPort(9042)))
             .withLocalDatacenter(cassandra.getLocalDatacenter());
     CassandraHelper.initialize(sessionBuilder);
-    memoryService = new CassandraMemoryService(CassandraHelper.getSession(), "rae", "rae_data");
+    // Use constructor with CqlSession for test container scenario
+    // Pass a mock embedding service for testing
+    EmbeddingService mockEmbeddingService = new RedbusEmbeddingService("", "");
+    memoryService =
+        new CassandraMemoryService(
+            CassandraHelper.getSession(), "rae", "rae_data", mockEmbeddingService);
   }
 
   @AfterAll

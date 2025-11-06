@@ -16,96 +16,91 @@
 
 package com.google.adk.runner;
 
-import com.datastax.oss.driver.api.core.CqlSessionBuilder;
 import com.google.adk.agents.BaseAgent;
 import com.google.adk.artifacts.CassandraArtifactService;
 import com.google.adk.memory.CassandraMemoryService;
 import com.google.adk.memory.RedbusEmbeddingService;
 import com.google.adk.plugins.BasePlugin;
 import com.google.adk.sessions.CassandraSessionService;
-import com.google.adk.store.CassandraHelper;
+import com.google.adk.utils.CassandraDBHelper;
 import com.google.common.collect.ImmutableList;
-import java.net.InetSocketAddress;
 import java.util.List;
 
 /**
- * The class for the Cassandra-backed GenAi runner.
+ * The class for the Cassandra-backed GenAI runner.
+ *
+ * <p>This runner uses CassandraDBHelper as a singleton connection manager. Configuration is loaded
+ * from environment variables with sensible defaults:
+ *
+ * <ul>
+ *   <li>CASSANDRA_HOST - Cassandra host (default: localhost)
+ *   <li>CASSANDRA_PORT - Cassandra port (default: 9042)
+ *   <li>CASSANDRA_USER - Cassandra username (default: cassandra)
+ *   <li>CASSANDRA_PASSWORD - Cassandra password (default: cassandra)
+ *   <li>CASSANDRA_KEYSPACE - Cassandra keyspace (default: rae)
+ *   <li>CASSANDRA_DATACENTER - Cassandra datacenter (default: datacenter1)
+ *   <li>CASSANDRA_REQUEST_TIMEOUT - Request timeout in seconds (default: 5)
+ * </ul>
+ *
+ * <p>All configuration has defaults, so for local development with a default Cassandra setup, no
+ * environment variables need to be set.
  *
  * @author Sandeep Belgavi
  * @since 2025-10-19
  */
 public class CassandraRunner extends Runner {
 
+  /**
+   * Initializes the runner with the given agent.
+   *
+   * <p>Uses the agent's name as the app name and an empty plugin list. CassandraDBHelper is
+   * automatically initialized from environment variables (or defaults).
+   *
+   * @param agent the agent to run
+   */
   public CassandraRunner(BaseAgent agent) {
-    this(
-        agent,
-        agent.name(),
-        ImmutableList.of(),
-        new CqlSessionBuilder()
-            .addContactPoint(new InetSocketAddress("127.0.0.1", 9042))
-            .withLocalDatacenter("datacenter1"));
+    this(agent, agent.name(), ImmutableList.of());
   }
 
   /**
-   * Initializes the runner with a connection to a local Cassandra instance.
+   * Initializes the runner with the given agent and app name.
+   *
+   * <p>Uses an empty plugin list. CassandraDBHelper is automatically initialized from environment
+   * variables (or defaults).
    *
    * @param agent the agent to run
    * @param appName the name of the application
    */
   public CassandraRunner(BaseAgent agent, String appName) {
-    this(
-        agent,
-        appName,
-        ImmutableList.of(),
-        new CqlSessionBuilder()
-            .addContactPoint(new InetSocketAddress("127.0.0.1", 9042))
-            .withLocalDatacenter("datacenter1"));
+    this(agent, appName, ImmutableList.of());
   }
 
   /**
-   * Initializes the runner with a connection to a local Cassandra instance.
+   * Initializes the runner with the given agent, app name, and plugins.
+   *
+   * <p>CassandraDBHelper is automatically initialized from environment variables (or defaults). All
+   * services (session, artifact, memory) use the singleton CassandraDBHelper connection. A 5-second
+   * request timeout is configured by default.
    *
    * @param agent the agent to run
    * @param appName the name of the application
    * @param plugins the list of plugins to use
    */
   public CassandraRunner(BaseAgent agent, String appName, List<BasePlugin> plugins) {
-    this(
-        agent,
-        appName,
-        plugins,
-        new CqlSessionBuilder()
-            .addContactPoint(new InetSocketAddress("127.0.0.1", 9042))
-            .withLocalDatacenter("datacenter1"));
-  }
-
-  /**
-   * Initializes the runner with a custom Cassandra session builder.
-   *
-   * @param agent the agent to run
-   * @param appName the name of the application
-   * @param plugins the list of plugins to use
-   * @param sessionBuilder the Cassandra session builder to use
-   */
-  public CassandraRunner(
-      BaseAgent agent, String appName, List<BasePlugin> plugins, CqlSessionBuilder sessionBuilder) {
     super(
         agent,
         appName,
-        initArtifactService(sessionBuilder),
+        new CassandraArtifactService(),
         new CassandraSessionService(),
         new CassandraMemoryService(
-            CassandraHelper.getSession(),
             "rae",
             "rae_data",
             new RedbusEmbeddingService(
                 System.getenv("ADU") != null ? System.getenv("ADU") : "",
                 System.getenv("ADP") != null ? System.getenv("ADP") : "")),
         plugins);
-  }
 
-  private static CassandraArtifactService initArtifactService(CqlSessionBuilder sessionBuilder) {
-    CassandraHelper.initialize(sessionBuilder);
-    return new CassandraArtifactService();
+    // Initialize CassandraDBHelper singleton (lazy initialization on first access)
+    CassandraDBHelper.getInstance();
   }
 }

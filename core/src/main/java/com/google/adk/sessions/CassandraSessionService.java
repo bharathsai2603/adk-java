@@ -23,7 +23,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.adk.events.Event;
 import com.google.adk.events.EventActions;
-import com.google.adk.store.CassandraHelper;
+import com.google.adk.utils.CassandraDBHelper;
 import com.google.common.collect.ImmutableList;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Maybe;
@@ -55,8 +55,9 @@ public final class CassandraSessionService implements BaseSessionService {
 
   /** Creates a new instance of the cassandra-backed session service. */
   public CassandraSessionService() {
-    this.session = CassandraHelper.getSession();
-    this.objectMapper = CassandraHelper.getObjectMapper();
+    CassandraDBHelper helper = CassandraDBHelper.getInstance();
+    this.session = helper.getSession();
+    this.objectMapper = helper.getObjectMapper();
   }
 
   @Override

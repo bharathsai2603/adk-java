@@ -1,14 +1,19 @@
 package com.google.adk.utils;
 
 import com.datastax.oss.driver.api.core.CqlSession;
+import com.datastax.oss.driver.api.core.CqlSessionBuilder;
+import com.datastax.oss.driver.api.core.config.DefaultDriverOption;
+import com.datastax.oss.driver.api.core.config.DriverConfigLoader;
 import com.datastax.oss.driver.api.core.cql.ResultSet;
 import com.datastax.oss.driver.api.core.cql.Row;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.guava.GuavaModule;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.google.adk.events.Event;
 import com.google.adk.sessions.Session;
 import com.google.common.collect.ImmutableList;
@@ -18,6 +23,7 @@ import com.google.genai.types.FunctionCall;
 import com.google.genai.types.FunctionResponse;
 import com.google.genai.types.Part;
 import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,29 +33,71 @@ import java.util.concurrent.ConcurrentMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Singleton helper class for managing Cassandra database connections and operations.
+ *
+ * <p>This class provides a centralized way to manage CqlSession and ObjectMapper instances for all
+ * Cassandra-related operations in the application.
+ *
+ * @author Sandeep Belgavi
+ */
 public class CassandraDBHelper {
   private static final Logger logger = LoggerFactory.getLogger(CassandraDBHelper.class);
   private static volatile CassandraDBHelper instance;
   private final CqlSession session;
   private final ObjectMapper objectMapper;
 
-  private static final String CASSANDRA_HOST = "cassandra_host";
-  private static final String CASSANDRA_PORT = "cassandra_port";
-  private static final String CASSANDRA_USER = "cassandra_user";
-  private static final String CASSANDRA_PASSWORD = "cassandra_password";
-  private static final String CASSANDRA_KEYSPACE = "cassandra_keyspace";
+  private static final String CASSANDRA_CONTACT_POINTS = "CASSANDRA_HOST";
+  private static final String CASSANDRA_PORT = "CASSANDRA_PORT";
+  private static final String CASSANDRA_USERNAME = "CASSANDRA_USERNAME";
+  private static final String CASSANDRA_PASSWORD = "CASSANDRA_PASSWORD";
+  private static final String CASSANDRA_KEYSPACE = "CASSANDRA_KEYSPACE";
+  private static final String CASSANDRA_DATACENTER = "CASSANDRA_DATACENTER";
+  private static final String CASSANDRA_REQUEST_TIMEOUT_SECONDS =
+      "CASSANDRA_REQUEST_TIMEOUT_SECONDS";
+  private static final String CASSANDRA_MAX_CONNECTIONS_PER_HOST =
+      "CASSANDRA_MAX_CONNECTIONS_PER_HOST";
+  // Default values
+  private static final String DEFAULT_CONTACT_POINTS = "localhost";
+  private static final String DEFAULT_PORT = "9042"; // default port for Cassandra
+  private static final String DEFAULT_USERNAME = "cassandra";
+  private static final String DEFAULT_PASSWORD = "cassandra";
+  private static final String DEFAULT_KEYSPACE = "rae";
+  private static final String DEFAULT_DATACENTER = "datacenter1";
+  private static final String DEFAULT_REQUEST_TIMEOUT_SECONDS =
+      "5"; // default request timeout in seconds
+  private static final String DEFAULT_MAX_CONNECTIONS_PER_HOST =
+      "32"; // default max connections per host
 
   private CassandraDBHelper() {
-    this.objectMapper = new ObjectMapper();
-    this.objectMapper.registerModule(new Jdk8Module());
-    this.objectMapper.registerModule(new GuavaModule());
-    this.objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-    this.objectMapper.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);
-    this.objectMapper.configure(DeserializationFeature.FAIL_ON_NULL_CREATOR_PROPERTIES, false);
-
+    this.objectMapper = createObjectMapper();
     this.session = initializeCqlSession();
+    logger.info("CassandraDBHelper initialized successfully");
   }
 
+  /**
+   * Creates and configures the ObjectMapper with necessary modules.
+   *
+   * @return configured ObjectMapper instance
+   */
+  private static ObjectMapper createObjectMapper() {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(new Jdk8Module());
+    mapper.registerModule(new JavaTimeModule());
+    mapper.registerModule(new GuavaModule());
+    mapper.setSerializationInclusion(JsonInclude.Include.NON_ABSENT);
+    mapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+    mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    mapper.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);
+    mapper.configure(DeserializationFeature.FAIL_ON_NULL_CREATOR_PROPERTIES, false);
+    return mapper;
+  }
+
+  /**
+   * Returns the singleton instance of CassandraDBHelper.
+   *
+   * @return the singleton instance
+   */
   public static CassandraDBHelper getInstance() {
     if (instance == null) {
       synchronized (CassandraDBHelper.class) {
@@ -61,27 +109,144 @@ public class CassandraDBHelper {
     return instance;
   }
 
+  /**
+   * Initializes the Cassandra CQL session from environment variables with defaults.
+   *
+   * <p>Environment variables:
+   *
+   * <ul>
+   *   <li>CASSANDRA_HOST (default: localhost)
+   *   <li>CASSANDRA_PORT (default: 9042)
+   *   <li>CASSANDRA_USER (default: cassandra)
+   *   <li>CASSANDRA_PASSWORD (default: cassandra)
+   *   <li>CASSANDRA_KEYSPACE (default: rae)
+   *   <li>CASSANDRA_DATACENTER (default: datacenter1)
+   *   <li>CASSANDRA_REQUEST_TIMEOUT (default: 5 seconds)
+   * </ul>
+   *
+   * @return configured CqlSession
+   * @throws IllegalArgumentException if port or timeout values are invalid
+   */
   private CqlSession initializeCqlSession() {
-    String host = System.getProperty(CASSANDRA_HOST);
-    int port = Integer.parseInt(System.getProperty(CASSANDRA_PORT));
-    String username = System.getProperty(CASSANDRA_USER);
-    String password = System.getProperty(CASSANDRA_PASSWORD);
-    String keyspace = System.getProperty(CASSANDRA_KEYSPACE);
-
-    if (host == null || username == null || password == null || keyspace == null) {
-      throw new IllegalArgumentException("Missing Cassandra environment variables");
+    String contactPoints = getEnvOrDefault(CASSANDRA_CONTACT_POINTS, DEFAULT_CONTACT_POINTS);
+    String username = getEnvOrDefault(CASSANDRA_USERNAME, DEFAULT_USERNAME);
+    String password = getEnvOrDefault(CASSANDRA_PASSWORD, DEFAULT_PASSWORD);
+    String keyspace = getEnvOrDefault(CASSANDRA_KEYSPACE, DEFAULT_KEYSPACE);
+    String datacenter = getEnvOrDefault(CASSANDRA_DATACENTER, DEFAULT_DATACENTER);
+    String timeoutStr =
+        getEnvOrDefault(CASSANDRA_REQUEST_TIMEOUT_SECONDS, DEFAULT_REQUEST_TIMEOUT_SECONDS);
+    String maxConnectionsPerHostStr =
+        getEnvOrDefault(CASSANDRA_MAX_CONNECTIONS_PER_HOST, DEFAULT_MAX_CONNECTIONS_PER_HOST);
+    int timeoutSeconds;
+    try {
+      timeoutSeconds = Integer.parseInt(timeoutStr);
+    } catch (NumberFormatException e) {
+      logger.warn(
+          "Invalid CASSANDRA_REQUEST_TIMEOUT: {}, using default: {} seconds",
+          timeoutStr,
+          DEFAULT_REQUEST_TIMEOUT_SECONDS);
+      timeoutSeconds = Integer.parseInt(DEFAULT_REQUEST_TIMEOUT_SECONDS);
     }
 
-    return CqlSession.builder()
-        .addContactPoint(new InetSocketAddress(host, port))
-        .withAuthCredentials(username, password)
-        .withKeyspace(keyspace)
-        .withLocalDatacenter("datacenter1")
+    logger.info(
+        "Connecting to Cassandra at {}:{} with keyspace: {}, datacenter: {}, timeout: {}s",
+        contactPoints,
+        keyspace,
+        datacenter,
+        timeoutSeconds);
+
+    // Configure request timeout programmatically
+    // ProgrammaticDriverConfigLoaderBuilder configBuilder =
+    // DriverConfigLoader.programmaticBuilder();
+    // configBuilder.withDuration(DefaultDriverOption.REQUEST_TIMEOUT,
+    // Duration.ofSeconds(timeoutSeconds));
+    // configBuilder.withInt(DefaultDriverOption.CONNECTIONS_PER_HOST,
+    // Integer.parseInt(maxConnectionsPerHostStr));
+
+    // DriverConfigLoader configLoader = configBuilder.build();
+
+    List<InetSocketAddress> contactPointsList = contactPointsParser(contactPoints);
+
+    CqlSessionBuilder sessionBuilder =
+        CqlSession.builder()
+            .addContactPoints(contactPointsList)
+            .withAuthCredentials(username, password)
+            .withKeyspace(keyspace)
+            .withLocalDatacenter(datacenter)
+            .withConfigLoader(
+                buildConfigLoader(
+                    Integer.parseInt(maxConnectionsPerHostStr),
+                    Duration.ofSeconds(timeoutSeconds)));
+
+    return sessionBuilder.build();
+  }
+
+  /**
+   * Builds the driver configuration with custom settings.
+   *
+   * @param maxConnectionsPerHost max connections per host
+   * @param requestTimeout request timeout
+   * @return configured driver config loader
+   */
+  private DriverConfigLoader buildConfigLoader(int maxConnectionsPerHost, Duration requestTimeout) {
+    return DriverConfigLoader.programmaticBuilder()
+        // Connection pool settings
+        .withInt(DefaultDriverOption.CONNECTION_POOL_LOCAL_SIZE, maxConnectionsPerHost)
+        .withInt(DefaultDriverOption.CONNECTION_POOL_REMOTE_SIZE, maxConnectionsPerHost / 2)
+
+        // Timeout settings
+        .withDuration(DefaultDriverOption.REQUEST_TIMEOUT, requestTimeout)
+        .withDuration(DefaultDriverOption.CONNECTION_INIT_QUERY_TIMEOUT, Duration.ofSeconds(5))
+        .withDuration(DefaultDriverOption.CONNECTION_SET_KEYSPACE_TIMEOUT, Duration.ofSeconds(5))
+
+        // Reconnection settings
+        .withDuration(DefaultDriverOption.RECONNECTION_BASE_DELAY, Duration.ofSeconds(1))
+        .withDuration(DefaultDriverOption.RECONNECTION_MAX_DELAY, Duration.ofSeconds(60))
+
+        // Heartbeat settings
+        .withDuration(DefaultDriverOption.HEARTBEAT_INTERVAL, Duration.ofSeconds(30))
+        .withDuration(DefaultDriverOption.HEARTBEAT_TIMEOUT, Duration.ofSeconds(10))
+
+        // Request throttling (prevent overwhelming the cluster)
+        .withInt(
+            DefaultDriverOption.REQUEST_THROTTLER_MAX_CONCURRENT_REQUESTS,
+            maxConnectionsPerHost * 1024)
+        .withInt(DefaultDriverOption.REQUEST_THROTTLER_MAX_QUEUE_SIZE, maxConnectionsPerHost * 1024)
         .build();
   }
 
+  /**
+   * Gets an environment variable value or returns the default.
+   *
+   * @param envVar the environment variable name
+   * @param defaultValue the default value if not found
+   * @return the environment variable value or default
+   */
+  private String getEnvOrDefault(String envVar, String defaultValue) {
+    String value = System.getenv(envVar);
+    if (value == null || value.trim().isEmpty()) {
+      logger.debug("Environment variable {} not found, using default: {}", envVar, defaultValue);
+      return defaultValue;
+    }
+    return value;
+  }
+
+  /**
+   * Returns the shared CqlSession instance.
+   *
+   * @return the CqlSession
+   */
   public CqlSession getSession() {
     return session;
+  }
+
+  /**
+   * Returns the shared ObjectMapper instance.
+   *
+   * @return the ObjectMapper
+   */
+  public ObjectMapper getObjectMapper() {
+    return objectMapper;
   }
 
   // --- Session Service Methods ---
@@ -335,5 +500,30 @@ public class CassandraDBHelper {
     if (session != null) {
       session.close();
     }
+  }
+
+  public List<InetSocketAddress> contactPointsParser(String contactPoints) {
+    List<InetSocketAddress> addresses = new ArrayList<>();
+    if (contactPoints == null || contactPoints.trim().isEmpty()) {
+      throw new IllegalArgumentException("Contact points are required");
+    }
+    String[] parts = contactPoints.split(",");
+    for (String part : parts) {
+      String[] hostPort = part.split(":");
+      if (hostPort.length == 2) {
+        try {
+          addresses.add(new InetSocketAddress(hostPort[0], Integer.parseInt(hostPort[1])));
+        } catch (NumberFormatException e) {
+          throw new IllegalArgumentException("Invalid port: " + hostPort[1], e);
+        }
+      } else {
+        try {
+          addresses.add(new InetSocketAddress(hostPort[0], Integer.parseInt(DEFAULT_PORT)));
+        } catch (NumberFormatException e) {
+          throw new IllegalArgumentException("Invalid port: " + DEFAULT_PORT, e);
+        }
+      }
+    }
+    return addresses;
   }
 }
