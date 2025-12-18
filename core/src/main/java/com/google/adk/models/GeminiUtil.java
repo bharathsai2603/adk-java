@@ -17,6 +17,7 @@ package com.google.adk.models;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
 
+import com.google.common.base.Ascii;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -25,6 +26,7 @@ import com.google.genai.types.Content;
 import com.google.genai.types.FileData;
 import com.google.genai.types.Part;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 /** Request / Response utilities for {@link Gemini}. */
@@ -40,7 +42,7 @@ public final class GeminiUtil {
    * Prepares an {@link LlmRequest} for the GenerateContent API.
    *
    * <p>This method can optionally sanitize the request and ensures that the last content part is
-   * from the user to prompt a model response. It also strips out any parts marked as "thoughts".
+   * from the user to prompt a model response.
    *
    * @param llmRequest The original {@link LlmRequest}.
    * @param sanitize Whether to sanitize the request to be compatible with the Gemini API backend.
@@ -48,12 +50,29 @@ public final class GeminiUtil {
    */
   public static LlmRequest prepareGenenerateContentRequest(
       LlmRequest llmRequest, boolean sanitize) {
+    return prepareGenenerateContentRequest(llmRequest, sanitize, /* stripThoughts= */ true);
+  }
+
+  /**
+   * Prepares an {@link LlmRequest} for the GenerateContent API.
+   *
+   * <p>This method can optionally sanitize the request and ensures that the last content part is
+   * from the user to prompt a model response. It also strips out any parts marked as "thoughts".
+   *
+   * @param llmRequest The original {@link LlmRequest}.
+   * @param sanitize Whether to sanitize the request to be compatible with the Gemini API backend.
+   * @return The prepared {@link LlmRequest}.
+   */
+  public static LlmRequest prepareGenenerateContentRequest(
+      LlmRequest llmRequest, boolean sanitize, boolean stripThoughts) {
     if (sanitize) {
       llmRequest = sanitizeRequestForGeminiApi(llmRequest);
     }
     List<Content> contents = ensureModelResponse(llmRequest.contents());
-    List<Content> finalContents = stripThoughts(contents);
-    return llmRequest.toBuilder().contents(finalContents).build();
+    if (stripThoughts) {
+      contents = stripThoughts(contents);
+    }
+    return llmRequest.toBuilder().contents(contents).build();
   }
 
   /**
@@ -128,7 +147,8 @@ public final class GeminiUtil {
    */
   static List<Content> ensureModelResponse(List<Content> contents) {
     // Last content must be from the user, otherwise the model won't respond.
-    if (contents.isEmpty() || !Iterables.getLast(contents).role().orElse("").equals("user")) {
+    if (contents.isEmpty()
+        || !Ascii.equalsIgnoreCase(Iterables.getLast(contents).role().orElse(""), "user")) {
       Content userContent =
           Content.builder()
               .parts(ImmutableList.of(Part.fromText(CONTINUE_OUTPUT_MESSAGE)))
@@ -137,6 +157,20 @@ public final class GeminiUtil {
       return Stream.concat(contents.stream(), Stream.of(userContent)).collect(toImmutableList());
     }
     return contents;
+  }
+
+  /**
+   * Extracts the first part of an LlmResponse, if available.
+   *
+   * @param llmResponse The LlmResponse to extract the first part from.
+   * @return The first part, or an empty optional if not found.
+   */
+  public static Optional<Part> getPart0FromLlmResponse(LlmResponse llmResponse) {
+    return llmResponse
+        .content()
+        .flatMap(Content::parts)
+        .filter(parts -> !parts.isEmpty())
+        .map(parts -> parts.get(0));
   }
 
   /**

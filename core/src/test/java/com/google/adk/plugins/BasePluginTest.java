@@ -1,3 +1,19 @@
+/*
+ * Copyright 2025 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.google.adk.plugins;
 
 import com.google.adk.agents.CallbackContext;
@@ -27,7 +43,7 @@ public final class BasePluginTest {
   private final CallbackContext callbackContext = Mockito.mock(CallbackContext.class);
   private final Content content = Content.builder().build();
   private final Event event = Mockito.mock(Event.class);
-  private final LlmRequest llmRequest = LlmRequest.builder().build();
+  private final LlmRequest.Builder llmRequestBuilder = LlmRequest.builder();
   private final LlmResponse llmResponse = LlmResponse.builder().build();
   private final ToolContext toolContext = Mockito.mock(ToolContext.class);
 
@@ -63,7 +79,7 @@ public final class BasePluginTest {
 
   @Test
   public void beforeModelCallback_returnsEmptyMaybe() {
-    plugin.beforeModelCallback(callbackContext, llmRequest).test().assertResult();
+    plugin.beforeModelCallback(callbackContext, llmRequestBuilder).test().assertResult();
   }
 
   @Test
@@ -74,7 +90,7 @@ public final class BasePluginTest {
   @Test
   public void onModelErrorCallback_returnsEmptyMaybe() {
     plugin
-        .onModelErrorCallback(callbackContext, llmRequest, new RuntimeException())
+        .onModelErrorCallback(callbackContext, llmRequestBuilder, new RuntimeException())
         .test()
         .assertResult();
   }

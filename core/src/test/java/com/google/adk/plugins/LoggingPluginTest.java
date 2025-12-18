@@ -1,3 +1,19 @@
+/*
+ * Copyright 2025 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.google.adk.plugins;
 
 import static org.mockito.Mockito.when;
@@ -53,8 +69,8 @@ public class LoggingPluginTest {
           .actions(EventActions.builder().build())
           .longRunningToolIds(Optional.empty())
           .build();
-  private final LlmRequest llmRequest =
-      LlmRequest.builder().model("default").contents(ImmutableList.of()).build();
+  private final LlmRequest.Builder llmRequestBuilder =
+      LlmRequest.builder().model("default").contents(ImmutableList.of());
   private final LlmResponse llmResponse = LlmResponse.builder().build();
   private final ImmutableMap<String, Object> toolArgs = ImmutableMap.of();
   private final ImmutableMap<String, Object> toolResult = ImmutableMap.of();
@@ -159,7 +175,10 @@ public class LoggingPluginTest {
 
   @Test
   public void beforeModelCallback_runsWithoutError() {
-    loggingPlugin.beforeModelCallback(mockCallbackContext, llmRequest).test().assertComplete();
+    loggingPlugin
+        .beforeModelCallback(mockCallbackContext, llmRequestBuilder)
+        .test()
+        .assertComplete();
   }
 
   @Test
@@ -168,8 +187,7 @@ public class LoggingPluginTest {
         .beforeModelCallback(
             mockCallbackContext,
             LlmRequest.builder()
-                .appendInstructions(ImmutableList.of("all work and no play".repeat(1000)))
-                .build())
+                .appendInstructions(ImmutableList.of("all work and no play".repeat(1000))))
         .test()
         .assertComplete();
   }
@@ -178,8 +196,7 @@ public class LoggingPluginTest {
   public void beforeModelCallback_tools() {
     loggingPlugin
         .beforeModelCallback(
-            mockCallbackContext,
-            LlmRequest.builder().appendTools(ImmutableList.of(mockTool)).build())
+            mockCallbackContext, LlmRequest.builder().appendTools(ImmutableList.of(mockTool)))
         .test()
         .assertComplete();
   }
@@ -215,7 +232,7 @@ public class LoggingPluginTest {
   @Test
   public void onModelErrorCallback_runsWithoutError() {
     loggingPlugin
-        .onModelErrorCallback(mockCallbackContext, llmRequest, throwable)
+        .onModelErrorCallback(mockCallbackContext, llmRequestBuilder, throwable)
         .test()
         .assertComplete();
   }

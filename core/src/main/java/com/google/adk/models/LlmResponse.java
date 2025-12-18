@@ -79,6 +79,14 @@ public abstract class LlmResponse extends JsonBaseModel {
   @JsonProperty("errorCode")
   public abstract Optional<FinishReason> errorCode();
 
+  /** Error code if the response is an error. Code varies by model. */
+  @JsonProperty("finishReason")
+  public abstract Optional<FinishReason> finishReason();
+
+  /** Error code if the response is an error. Code varies by model. */
+  @JsonProperty("avgLogprobs")
+  public abstract Optional<Double> avgLogprobs();
+
   /** Error message if the response is an error. */
   @JsonProperty("errorMessage")
   public abstract Optional<String> errorMessage();
@@ -93,6 +101,10 @@ public abstract class LlmResponse extends JsonBaseModel {
   /** Usage metadata about the response(s). */
   @JsonProperty("usageMetadata")
   public abstract Optional<GenerateContentResponseUsageMetadata> usageMetadata();
+
+  /** The model version used to generate the response. */
+  @JsonProperty("modelVersion")
+  public abstract Optional<String> modelVersion();
 
   public abstract Builder toBuilder();
 
@@ -136,6 +148,16 @@ public abstract class LlmResponse extends JsonBaseModel {
 
     public abstract Builder errorCode(Optional<FinishReason> errorCode);
 
+    @JsonProperty("finishReason")
+    public abstract Builder finishReason(@Nullable FinishReason finishReason);
+
+    public abstract Builder finishReason(Optional<FinishReason> finishReason);
+
+    @JsonProperty("avgLogprobs")
+    public abstract Builder avgLogprobs(@Nullable Double avgLogprobs);
+
+    public abstract Builder avgLogprobs(Optional<Double> avgLogprobs);
+
     @JsonProperty("errorMessage")
     public abstract Builder errorMessage(@Nullable String errorMessage);
 
@@ -147,6 +169,11 @@ public abstract class LlmResponse extends JsonBaseModel {
 
     public abstract Builder usageMetadata(
         Optional<GenerateContentResponseUsageMetadata> usageMetadata);
+
+    @JsonProperty("modelVersion")
+    public abstract Builder modelVersion(@Nullable String modelVersion);
+
+    public abstract Builder modelVersion(Optional<String> modelVersion);
 
     @CanIgnoreReturnValue
     public final Builder response(GenerateContentResponse response) {
@@ -175,6 +202,7 @@ public abstract class LlmResponse extends JsonBaseModel {
         }
       }
       this.usageMetadata(response.usageMetadata());
+      this.modelVersion(response.modelVersion());
       return this;
     }
 
